@@ -15,10 +15,26 @@ export default async function Home() {
     return <main className="p-6 text-red-600">DB error: {error.message}</main>;
   }
 
-  const rows = (data ?? [])
-    .filter(r => typeof r.delta === "number")
-    .sort((a, b) => Math.abs((b.delta ?? 0)) - Math.abs((a.delta ?? 0)))
+  const moves = (data ?? []).filter((r: any) => typeof r.delta === "number");
+
+  const top = moves
+    .sort((a: any, b: any) => Math.abs((b.delta ?? 0)) - Math.abs((a.delta ?? 0)))
     .slice(0, 50);
+
+  const ids = Array.from(new Set(top.map((r: any) => r.market_id)));
+
+  const { data: marketRows } = await supabaseServer
+    .from("markets")
+    .select("platform_id, market_id, title, raw")
+    .eq("platform_id", "polymarket")
+    .in("market_id", ids);
+
+  const metaMap = new Map<string, { title?: string | null; slug?: string | null }>();
+  for (const m of marketRows ?? []) {
+    const raw: any = (m as any).raw;
+    const slug = raw?.slug ?? null;
+    metaMap.set((m as any).market_id, { title: (m as any).title, slug });
+  }
 
   return (
     <main className="p-6 space-y-6">
@@ -44,17 +60,30 @@ export default async function Home() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, idx) => (
-              <tr key={idx} className="border-t">
-                <td className="p-3">{r.platform_id}</td>
-                <td className="p-3 truncate max-w-[560px]">{r.market_id}</td>
-                <td className="p-3 text-right">{fmtPct(r.prob_now)}</td>
-                <td className="p-3 text-right">{fmtPct(r.prob_then)}</td>
-                <td className="p-3 text-right">{fmtSignedPct(r.delta)}</td>
-                <td className="p-3 text-right">{r.trust_score ?? ""}</td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
+            {top.map((r: any, idx: number) => {
+              const meta = metaMap.get(r.market_id);
+              const label = meta?.title || r.market_id;
+              const pmUrl = meta?.slug ? `https://polymarket.com/market/${meta.slug}` : "https://polymarket.com";
+
+              return (
+                <tr key={idx} className="border-t">
+                  <td className="p-3">{r.platform_id}</td>
+                  <td className="p-3 max-w-[720px]">
+                    <div className="space-y-1">
+                      <a className="underline" href={pmUrl} target="_blank" rel="noreferrer">
+                        {label}
+                      </a>
+                      <div className="text-xs text-gray-500">ID: {r.market_id}</div>
+                    </div>
+                  </td>
+                  <td className="p-3 text-right">{fmtPct(r.prob_now)}</td>
+                  <td className="p-3 text-right">{fmtPct(r.prob_then)}</td>
+                  <td className="p-3 text-right">{fmtSignedPct(r.delta)}</td>
+                  <td className="p-3 text-right">{r.trust_score ?? ""}</td>
+                </tr>
+              );
+            })}
+            {top.length === 0 ? (
               <tr className="border-t">
                 <td className="p-3" colSpan={6}>No data yet. Engine comes next.</td>
               </tr>
