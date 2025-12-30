@@ -2,7 +2,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 export default async function Home() {
-  const windowKey = "24h";
+  const windowKey = "1m";
 
   const { data, error } = await supabaseServer
     .from("moves")

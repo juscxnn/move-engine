@@ -5,7 +5,7 @@ export default async function Mismatches() {
   const { data, error } = await supabaseServer
     .from("mismatches")
     .select("event_id, window_key, ts_end, prob_polymarket, prob_kalshi, gap")
-    .eq("window_key", "24h")
+    .eq("window_key", "1m")
     .order("ts_end", { ascending: false })
     .limit(200);
 
