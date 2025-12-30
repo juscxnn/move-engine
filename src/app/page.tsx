@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
 
@@ -6,18 +9,19 @@ type WindowKey = typeof WINDOWS[number];
 
 function pickWindowKey(w?: string): WindowKey {
   if (!w) return "5m";
-  return (WINDOWS as readonly string[]).includes(w) ? (w as WindowKey) : "1m";
+  return (WINDOWS as readonly string[]).includes(w) ? (w as WindowKey) : "5m";
 }
 
-export default async function Home({ searchParams }: { searchParams?: { w?: string } }) {
-  const windowKey = pickWindowKey(searchParams?.w);
+export default async function Home({ searchParams }: { searchParams?: any }) {
+  const sp = await Promise.resolve(searchParams ?? {});
+  const windowKey = pickWindowKey(sp.w);
 
   const { data, error } = await supabaseServer
     .from("moves")
     .select("platform_id, market_id, window_key, ts_end, prob_now, prob_then, delta, trust_score")
     .eq("window_key", windowKey)
     .order("ts_end", { ascending: false })
-    .limit(400);
+    .limit(600);
 
   if (error) {
     return <main className="p-6 text-red-600">DB error: {error.message}</main>;
