@@ -5,7 +5,7 @@ const WINDOWS = ["1m", "5m", "1h", "6h", "24h"] as const;
 type WindowKey = typeof WINDOWS[number];
 
 function pickWindowKey(w?: string): WindowKey {
-  if (!w) return "1m";
+  if (!w) return "5m";
   return (WINDOWS as readonly string[]).includes(w) ? (w as WindowKey) : "1m";
 }
 
