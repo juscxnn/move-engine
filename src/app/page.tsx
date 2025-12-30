@@ -33,6 +33,8 @@ export default async function Home({ searchParams }: { searchParams?: any }) {
     .sort((a: any, b: any) => Math.abs((b.delta ?? 0)) - Math.abs((a.delta ?? 0)))
     .slice(0, 50);
 
+  const latestTsEnd = top[0]?.ts_end ?? null;
+
   const ids = Array.from(new Set(top.map((r: any) => r.market_id)));
 
   const { data: marketRows } = await supabaseServer
