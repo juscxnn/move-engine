@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
 
-export default async function Home() {
-  const windowKey = "1m";
+const WINDOWS = ["1m", "5m", "1h", "6h", "24h"] as const;
+type WindowKey = typeof WINDOWS[number];
+
+function pickWindowKey(w?: string): WindowKey {
+  if (!w) return "1m";
+  return (WINDOWS as readonly string[]).includes(w) ? (w as WindowKey) : "1m";
+}
+
+export default async function Home({ searchParams }: { searchParams?: { w?: string } }) {
+  const windowKey = pickWindowKey(searchParams?.w);
 
   const { data, error } = await supabaseServer
     .from("moves")
     .select("platform_id, market_id, window_key, ts_end, prob_now, prob_then, delta, trust_score")
     .eq("window_key", windowKey)
     .order("ts_end", { ascending: false })
-    .limit(200);
+    .limit(400);
 
   if (error) {
     return <main className="p-6 text-red-600">DB error: {error.message}</main>;
@@ -40,7 +48,25 @@ export default async function Home() {
     <main className="p-6 space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Move Engine</h1>
-        <div className="text-sm text-gray-600">Top Moves (window: {windowKey})</div>
+
+        <div className="text-sm text-gray-600 flex flex-wrap items-center gap-3">
+          <div>Top Moves</div>
+          <div className="flex gap-2">
+            {WINDOWS.map(w => {
+              const active = w === windowKey;
+              return (
+                <Link
+                  key={w}
+                  href={`/?w=${w}`}
+                  className={`px-2 py-1 rounded border text-xs ${active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800"}`}
+                >
+                  {w}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex gap-4 text-sm">
           <Link className="underline" href="/">Moves</Link>
           <Link className="underline" href="/mismatches">Mismatches</Link>
@@ -68,7 +94,7 @@ export default async function Home() {
               return (
                 <tr key={idx} className="border-t">
                   <td className="p-3">{r.platform_id}</td>
-                  <td className="p-3 max-w-[720px]">
+                  <td className="p-3 max-w-[760px]">
                     <div className="space-y-1">
                       <a className="underline" href={pmUrl} target="_blank" rel="noreferrer">
                         {label}
@@ -85,7 +111,7 @@ export default async function Home() {
             })}
             {top.length === 0 ? (
               <tr className="border-t">
-                <td className="p-3" colSpan={6}>No data yet. Engine comes next.</td>
+                <td className="p-3" colSpan={6}>No data yet.</td>
               </tr>
             ) : null}
           </tbody>
