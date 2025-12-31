@@ -1,53 +1,57 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 import Link from "next/link";
 import { supabaseServer } from "@/lib/supabaseServer";
 
-const WINDOWS = ["1m", "5m", "1h", "6h", "24h"] as const;
-type WindowKey = typeof WINDOWS[number];
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function pickWindowKey(w?: string): WindowKey {
-  if (!w) return "5m";
-  return (WINDOWS as readonly string[]).includes(w) ? (w as WindowKey) : "5m";
+const ALLOWED = new Set(["5m", "1h", "6h", "24h"]);
+
+function pickWindowKey(v?: string) {
+  if (!v) return "5m";
+  if (ALLOWED.has(v)) return v;
+  return "5m";
 }
 
-export default async function Home({ searchParams }: { searchParams?: any }) {
-  const sp = await Promise.resolve(searchParams ?? {});
-  const windowKey = pickWindowKey(sp.w);
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<{ w?: string }>;
+}) {
+  const sp = searchParams ? await searchParams : {};
+  const windowKey = pickWindowKey(sp?.w);
 
   const { data, error } = await supabaseServer
     .from("moves")
     .select("platform_id, market_id, window_key, ts_end, prob_now, prob_then, delta, trust_score")
     .eq("window_key", windowKey)
     .order("ts_end", { ascending: false })
-    .limit(600);
+    .limit(500);
 
   if (error) {
     return <main className="p-6 text-red-600">DB error: {error.message}</main>;
   }
 
-  const moves = (data ?? []).filter((r: any) => typeof r.delta === "number");
+  const rowsRaw = (data ?? []).filter(r => typeof r.delta === "number");
+  const latestTsEnd = rowsRaw[0]?.ts_end ?? null;
 
-  const top = moves
-    .sort((a: any, b: any) => Math.abs((b.delta ?? 0)) - Math.abs((a.delta ?? 0)))
+  const rows = rowsRaw
+    .sort((a, b) => Math.abs((b.delta ?? 0)) - Math.abs((a.delta ?? 0)))
     .slice(0, 50);
 
-  const latestTsEnd = top[0]?.ts_end ?? null;
+  const ids = Array.from(new Set(rows.map(r => r.market_id).filter(Boolean)));
 
-  const ids = Array.from(new Set(top.map((r: any) => r.market_id)));
+  const meta = new Map<string, { title: string | null; slug: string | null }>();
+  if (ids.length > 0) {
+    const { data: mdata } = await supabaseServer
+      .from("markets")
+      .select("market_id, title, raw")
+      .eq("platform_id", "polymarket")
+      .in("market_id", ids);
 
-  const { data: marketRows } = await supabaseServer
-    .from("markets")
-    .select("platform_id, market_id, title, raw")
-    .eq("platform_id", "polymarket")
-    .in("market_id", ids);
-
-  const metaMap = new Map<string, { title?: string | null; slug?: string | null }>();
-  for (const m of marketRows ?? []) {
-    const raw: any = (m as any).raw;
-    const slug = raw?.slug ?? null;
-    metaMap.set((m as any).market_id, { title: (m as any).title, slug });
+    for (const m of mdata ?? []) {
+      const slug = (m as any)?.raw?.slug ?? null;
+      meta.set(m.market_id, { title: m.title ?? null, slug });
+    }
   }
 
   return (
@@ -56,26 +60,18 @@ export default async function Home({ searchParams }: { searchParams?: any }) {
         <h1 className="text-2xl font-semibold">Move Engine</h1>
 
         <div className="text-sm text-gray-600 flex flex-wrap items-center gap-3">
-          <div>Top Moves</div>
+          <div>Window: {windowKey}</div>
           <div className="flex gap-2">
-            {WINDOWS.map(w => {
-              const active = w === windowKey;
-              return (
-                <Link
-                  key={w}
-                  href={`/?w=${w}`}
-                  className={`px-2 py-1 rounded border text-xs ${active ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-800"}`}
-                >
-                  {w}
-                </Link>
-              );
-            })}
+            <Link className="underline" href="/?w=5m">5m</Link>
+            <Link className="underline" href="/?w=1h">1h</Link>
+            <Link className="underline" href="/?w=6h">6h</Link>
+            <Link className="underline" href="/?w=24h">24h</Link>
           </div>
+          <Link className="underline" href="/mismatches">Mismatches</Link>
         </div>
 
-        <div className="flex gap-4 text-sm">
-          <Link className="underline" href="/">Moves</Link>
-          <Link className="underline" href="/mismatches">Mismatches</Link>
+        <div className="text-xs text-gray-500">
+          Latest ts_end: {latestTsEnd ? new Date(latestTsEnd).toISOString() : "n/a"}
         </div>
       </header>
 
@@ -92,21 +88,26 @@ export default async function Home({ searchParams }: { searchParams?: any }) {
             </tr>
           </thead>
           <tbody>
-            {top.map((r: any, idx: number) => {
-              const meta = metaMap.get(r.market_id);
-              const label = meta?.title || r.market_id;
-              const pmUrl = meta?.slug ? `https://polymarket.com/market/${meta.slug}` : "https://polymarket.com";
+            {rows.map((r, idx) => {
+              const m = meta.get(r.market_id);
+              const title = m?.title ?? r.market_id;
+              const slug = m?.slug ?? null;
+              const href = slug ? `https://polymarket.com/event/${slug}` : null;
 
               return (
                 <tr key={idx} className="border-t">
                   <td className="p-3">{r.platform_id}</td>
-                  <td className="p-3 max-w-[760px]">
-                    <div className="space-y-1">
-                      <a className="underline" href={pmUrl} target="_blank" rel="noreferrer">
-                        {label}
-                      </a>
-                      <div className="text-xs text-gray-500">ID: {r.market_id}</div>
+                  <td className="p-3">
+                    <div className="truncate max-w-[720px]">
+                      {href ? (
+                        <a className="underline" href={href} target="_blank" rel="noreferrer">
+                          {title}
+                        </a>
+                      ) : (
+                        title
+                      )}
                     </div>
+                    <div className="text-xs text-gray-500">{r.market_id}</div>
                   </td>
                   <td className="p-3 text-right">{fmtPct(r.prob_now)}</td>
                   <td className="p-3 text-right">{fmtPct(r.prob_then)}</td>
@@ -115,7 +116,7 @@ export default async function Home({ searchParams }: { searchParams?: any }) {
                 </tr>
               );
             })}
-            {top.length === 0 ? (
+            {rows.length === 0 ? (
               <tr className="border-t">
                 <td className="p-3" colSpan={6}>No data yet.</td>
               </tr>
